@@ -1,7 +1,5 @@
 # Tobacco Bias Assessment Framework
 
-**Author and maintainer:** [Sherif Elmitwalli](https://github.com/sherifelmitwalli)
-
 A unified implementation for assessing industry-aligned bias in large language models (LLMs) on tobacco-related queries. Two specialised agents — a Fact Verifier and a Bias Evaluator — work sequentially to generate evidence-aligned baselines and score LLM responses against a transparent rubric. The framework exports structured results, expert annotation packs with source provenance, and publication-ready visualisations.
 
 ## Architecture

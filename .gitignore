@@ -1,0 +1,34 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Python and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Generated run artifacts
+outputs/
+outputs_*/
+crewai_bias_assessment_results.json
+report.txt
+bias_assessment.json
+ground_truth.md
+
+# Manuscripts, submission material, and private review records
+*.docx
+*.pdf
+*.xlsx
+*.xlsb
+*.pptx
+Lancet*/
+manuscript_figures_final/
+expert_validation_package/
+work/
+PEER_REVIEW*.md
+PIPELINE_REVIEW.md
+QUERY_REVISION_LOG*.md
+REVIEW_AND_CHANGE_TRAIL*.md
+build_john_pilot_doc.py

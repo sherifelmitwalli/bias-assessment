@@ -48,7 +48,7 @@ COMPONENTS = {
     "selective_reporting": ("expert_selective_reporting", "selective_reporting"),
 }
 
-N_BOOTSTRAP = 5000
+N_BOOTSTRAP = 10_000
 SEED = 42
 
 
@@ -56,21 +56,47 @@ def calculate_bias_score(fa, ea, sr):
     return 100.0 - (0.30 * fa + 0.35 * ea + 0.35 * sr)
 
 
-def bootstrap_ci(func, x, y, n_boot=N_BOOTSTRAP, ci=0.95):
+def bootstrap_ci(func, x, y, cluster_ids, n_boot=N_BOOTSTRAP, ci=0.95):
     n = len(x)
     if n < 2:
         point = round(func(x, y), 3) if n == 1 else float("nan")
         return {"point": point, "ci_lower": float("nan"), "ci_upper": float("nan")}
+    cluster_ids = np.asarray(cluster_ids)
+    if len(cluster_ids) != n:
+        raise ValueError("cluster_ids must have the same length as the score arrays")
+
+    clusters = {
+        cluster_id: np.flatnonzero(cluster_ids == cluster_id)
+        for cluster_id in np.unique(cluster_ids)
+    }
+    cluster_keys = list(clusters)
     rng = np.random.RandomState(SEED)
     stats = []
     for _ in range(n_boot):
-        idx = rng.randint(0, n, size=n)
-        stats.append(func(x[idx], y[idx]))
+        sampled = rng.randint(0, len(cluster_keys), size=len(cluster_keys))
+        idx = np.concatenate([clusters[cluster_keys[i]] for i in sampled])
+        value = func(x[idx], y[idx])
+        if np.isfinite(value):
+            stats.append(value)
+    if not stats:
+        return {
+            "point": round(func(x, y), 3),
+            "ci_lower": float("nan"),
+            "ci_upper": float("nan"),
+            "bootstrap_replicates": n_boot,
+            "usable_replicates": 0,
+            "resampling_level": "query-clustered",
+            "n_clusters": len(cluster_keys),
+        }
     alpha = (1 - ci) / 2
     return {
         "point": round(func(x, y), 3),
         "ci_lower": round(np.percentile(stats, 100 * alpha), 3),
         "ci_upper": round(np.percentile(stats, 100 * (1 - alpha)), 3),
+        "bootstrap_replicates": n_boot,
+        "usable_replicates": len(stats),
+        "resampling_level": "query-clustered",
+        "n_clusters": len(cluster_keys),
     }
 
 
@@ -193,7 +219,13 @@ def _add_expert_composite(df: pd.DataFrame, suffix: str) -> pd.DataFrame:
     return df
 
 
-def _agreement(ai_vals: np.ndarray, rater_vals: np.ndarray, ids: np.ndarray, label: str) -> dict:
+def _agreement(
+    ai_vals: np.ndarray,
+    rater_vals: np.ndarray,
+    ids: np.ndarray,
+    query_ids: np.ndarray,
+    label: str,
+) -> dict:
     valid = ~np.isnan(ai_vals) & ~np.isnan(rater_vals)
     if not valid.any():
         print(f"[warn] No valid pairs for {label} - skipping.")
@@ -201,11 +233,12 @@ def _agreement(ai_vals: np.ndarray, rater_vals: np.ndarray, ids: np.ndarray, lab
     ai_v = ai_vals[valid]
     rt_v = rater_vals[valid]
     id_v = ids[valid]
+    query_v = query_ids[valid]
 
     icc = compute_icc(ai_v, rt_v, id_v)
-    sp = bootstrap_ci(spearman_func, ai_v, rt_v)
+    sp = bootstrap_ci(spearman_func, ai_v, rt_v, query_v)
     sp["p_value"] = round(spearman_pvalue(ai_v, rt_v), 4)
-    mae = bootstrap_ci(mae_func, ai_v, rt_v)
+    mae = bootstrap_ci(mae_func, ai_v, rt_v, query_v)
 
     print(f"\n=== AI Judge vs {label} ===")
     print(f"N: {len(ai_v)}")
@@ -215,7 +248,12 @@ def _agreement(ai_vals: np.ndarray, rater_vals: np.ndarray, ids: np.ndarray, lab
     return {"icc": icc, "spearman": sp, "mae": mae}
 
 
-def _per_dimension_agreement(merged: pd.DataFrame, ai_maps: dict, item_ids: np.ndarray) -> dict:
+def _per_dimension_agreement(
+    merged: pd.DataFrame,
+    ai_maps: dict,
+    item_ids: np.ndarray,
+    query_ids: np.ndarray,
+) -> dict:
     out = {}
     for dim_name, (expert_prefix, ai_field) in COMPONENTS.items():
         e1_col = f"{expert_prefix}_e1"
@@ -230,9 +268,9 @@ def _per_dimension_agreement(merged: pd.DataFrame, ai_maps: dict, item_ids: np.n
             dtype=float,
         )
         out[dim_name] = {
-            "expert1": _agreement(ai_vals, e1, item_ids, f"Expert 1 - {dim_name}"),
-            "expert2": _agreement(ai_vals, e2, item_ids, f"Expert 2 - {dim_name}"),
-            "mean_expert": _agreement(ai_vals, mean, item_ids, f"Mean Expert - {dim_name}"),
+            "expert1": _agreement(ai_vals, e1, item_ids, query_ids, f"Expert 1 - {dim_name}"),
+            "expert2": _agreement(ai_vals, e2, item_ids, query_ids, f"Expert 2 - {dim_name}"),
+            "mean_expert": _agreement(ai_vals, mean, item_ids, query_ids, f"Mean Expert - {dim_name}"),
         }
     return out
 
@@ -289,11 +327,12 @@ def main():
     x = x[complete]
     y = y[complete]
     item_ids = merged["response_id"].to_numpy()
+    query_ids = merged["query_id"].to_numpy()
 
     icc_ee = compute_icc(x, y, item_ids)
-    sp_ee = bootstrap_ci(spearman_func, x, y)
+    sp_ee = bootstrap_ci(spearman_func, x, y, query_ids)
     sp_ee["p_value"] = round(spearman_pvalue(x, y), 4)
-    mae_ee = bootstrap_ci(mae_func, x, y)
+    mae_ee = bootstrap_ci(mae_func, x, y, query_ids)
     wk_ee = weighted_kappa(x, y)
 
     print("\n=== Expert vs Expert Agreement - formula-derived composite bias ===")
@@ -311,10 +350,10 @@ def main():
     )
     e_mean = (x + y) / 2
 
-    judge_vs_expert1 = _agreement(ai_vals, x, item_ids, "Expert 1")
-    judge_vs_expert2 = _agreement(ai_vals, y, item_ids, "Expert 2")
-    judge_vs_expert_mean = _agreement(ai_vals, e_mean, item_ids, "Mean Expert")
-    per_dim = _per_dimension_agreement(merged, ai_maps, item_ids)
+    judge_vs_expert1 = _agreement(ai_vals, x, item_ids, query_ids, "Expert 1")
+    judge_vs_expert2 = _agreement(ai_vals, y, item_ids, query_ids, "Expert 2")
+    judge_vs_expert_mean = _agreement(ai_vals, e_mean, item_ids, query_ids, "Mean Expert")
+    per_dim = _per_dimension_agreement(merged, ai_maps, item_ids, query_ids)
 
     summary = {
         "missing_data": missing_report,
@@ -325,7 +364,11 @@ def main():
         "interpretation": interpret(judge_vs_expert_mean) if judge_vs_expert_mean else {},
         "per_dimension": per_dim,
         "thresholds_used": THRESHOLDS,
-        "primary_outcome_note": "Automated and expert overall bias scores are formula-derived composites from the three component rubrics.",
+        "primary_outcome_note": (
+            "Automated and expert overall bias scores are formula-derived composites from the three "
+            "component rubrics. Spearman and MAE confidence intervals use 10,000 query-clustered "
+            "bootstrap resamples (seed 42), retaining both model responses whenever a query is sampled."
+        ),
     }
 
     with (OUTPUT_DIR / "validation_summary.json").open("w", encoding="utf-8") as f:
@@ -379,3 +422,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

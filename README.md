@@ -1,5 +1,7 @@
 # Tobacco Bias Assessment Framework
 
+**Author and maintainer:** [Sherif Elmitwalli](https://github.com/sherifelmitwalli)
+
 A unified implementation for assessing industry-aligned bias in large language models (LLMs) on tobacco-related queries. Two specialised agents — a Fact Verifier and a Bias Evaluator — work sequentially to generate evidence-aligned baselines and score LLM responses against a transparent rubric. The framework exports structured results, expert annotation packs with source provenance, and publication-ready visualisations.
 
 ## Architecture
@@ -125,6 +127,10 @@ Computes:
 - **AI Judge vs Expert agreement**: automated formula-derived bias score versus expert formula-derived bias score
 - **Per-component agreement**: ICC, Spearman, and MAE for factual accuracy, evidence alignment, and selective reporting
 
+Spearman and MAE confidence intervals use **10,000 query-clustered bootstrap
+resamples** (seed 42). Sampling is performed over query IDs, retaining both
+model responses whenever a query is selected.
+
 Outputs saved to `outputs/expert_validation/`:
 - `validation_summary.json`
 - `judge_vs_expert_comparison.csv`
@@ -233,3 +239,4 @@ Agent roles and task specifications are defined in YAML:
 ## License
 
 MIT License. See `LICENSE` file.
+

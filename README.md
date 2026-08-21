@@ -14,7 +14,7 @@ A unified implementation for assessing industry-aligned bias in large language m
 ## Key Features
 
 - **Dynamic Ground Truth**: Evidence-synthesised baselines via real-time search, with transparent source tracking (`ground_truth_sources_used`) and fallback to calibration ground truth if generation fails.
-- **Multi-LLM Evaluation**: Default targets Llama-3 and Gemini via OpenRouter API. Easily extended to additional models via `LLM_MODEL_MAPPING`.
+- **Multi-LLM Evaluation**: Default targets Llama-3.3 and Gemini via OpenRouter API. Easily extended to additional models via `LLM_MODEL_MAPPING`.
 - **Bias Scoring**: The evaluator scores three component dimensions: Factual Accuracy, Evidence Alignment, and Selective Reporting. The composite is calculated downstream using `Bias Score = 100 − (0.30×Factual Accuracy + 0.35×Evidence Alignment + 0.35×Selective Reporting)`. Evidence Alignment and Selective Reporting carry a slightly higher weight (0.35 each) than Factual Accuracy (0.30) because industry-aligned bias in tobacco-related communication more commonly manifests through selective framing, omission, and attenuation of risk than through overt factual falsification. Rhetorical bias patterns are detected and reported qualitatively but do not receive a separate numeric adjustment.
 - **Full Query Default**: By default, the pipeline evaluates every query in `data/llm_bias_queries.json`. In the manuscript-aligned dataset, this is 58 queries. The `--queries` argument is available only as a development/debugging limiter.
 - **Paired Statistical Design**: Each query is answered by all models, so between-model tests use paired statistics — Wilcoxon signed-rank (2 models) or Friedman + pairwise Wilcoxon with Holm-Bonferroni (3+ models).
@@ -55,10 +55,10 @@ A unified implementation for assessing industry-aligned bias in large language m
 Run the full manuscript-aligned assessment pipeline:
 
 ```
-python main.py --llms Llama-3 Gemini
+python main.py --llms Llama-3.3 Gemini
 ```
 
-- `--llms`: Space-separated model names (default: `Llama-3 Gemini`). Supported aliases: `GPT-4`, `Claude-3`, `Llama-3`, `Gemini`.
+- `--llms`: Space-separated model names (default: `Llama-3.3 Gemini`). Supported aliases: `GPT-4`, `Claude-3`, `Llama-3.3`, `Llama-3` (legacy alias), `Gemini`.
 - `--queries`: Optional development/debugging limiter only. If omitted, all queries in `data/llm_bias_queries.json` are evaluated.
 - `--simulated`: Use mock responses for **pipeline testing only** — results are not suitable for research publication.
 
@@ -71,7 +71,7 @@ With the manuscript-aligned dataset and default models, the default command eval
 For a quick development test only:
 
 ```
-python main.py --llms Llama-3 Gemini --queries 5
+python main.py --llms Llama-3.3 Gemini --queries 5
 ```
 
 ---
@@ -81,7 +81,7 @@ python main.py --llms Llama-3 Gemini --queries 5
 ### Step 1 — Run the pipeline
 
 ```
-python main.py --llms Llama-3 Gemini
+python main.py --llms Llama-3.3 Gemini
 ```
 
 Outputs to `outputs/annotations/`:
